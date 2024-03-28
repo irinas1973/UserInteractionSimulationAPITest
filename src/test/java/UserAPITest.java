@@ -4,7 +4,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.testng.Assert;
 import org.testng.annotations.AfterClass;
-import org.testng.annotations.AfterGroups;
 import org.testng.annotations.BeforeClass;
 import org.testng.annotations.Test;
 import utils.ConfigLoader;
@@ -18,7 +17,7 @@ import java.util.List;
 public class UserAPITest {
     private List<User> userList;
     private WireMockServerSetup wireMockServerSetup;
-    private boolean isUserExist = false;
+
     Logger logger;
 
     @BeforeClass
@@ -26,8 +25,7 @@ public class UserAPITest {
         logger = LogManager.getLogger(this.getClass());
         wireMockServerSetup = new WireMockServerSetup();
         userList = ConfigLoader.loadConfig("src/test/resources/users.json");
-        wireMockServerSetup.updateWireMockStub(userList);
-        logger.info("****************************************");
+        loadingStubData("****************************************");
         logger.info("*****Start transfer users from JSON*****");
         for (User user : userList) {
             UserApi.TestAPIResponse response = UserApi.createUser(user);
@@ -38,7 +36,7 @@ public class UserAPITest {
         logger.info("*****Users are received from users.json file*****");
     }
 
-    @Test(priority = 1, groups = "createUser")
+    @Test(priority = 1)
     public void testCreateUser() throws IOException {
         logger.info("*****Test POST user started*****");
         User user = new User(3, "Yan", "yan.kovlev@gmail.com");
@@ -50,12 +48,12 @@ public class UserAPITest {
         });
         logger.info("Created: {}", addedUser);
         logger.info("*****Test POST completed*****");
+        loadingStubData("New user added to WireMock mappings");
     }
 
-    @AfterGroups("createUser")
-    public void afterTestCreateUser() {
+    private void loadingStubData(String message) {
         wireMockServerSetup.updateWireMockStub(userList);
-        logger.info("New user added to WireMock mappings");
+        logger.info(message);
     }
 
     @Test(priority = 2)
@@ -63,14 +61,20 @@ public class UserAPITest {
         int userId = 3;
         logger.info("*****Test GET user with UserID=%d started*****", userId);
         UserApi.TestAPIResponse response = UserApi.getUser(userId);
+        try{
         Assert.assertEquals(response.getCode(), 200);
         User user = new Gson().fromJson(response.getResponseStr(), new TypeToken<>() {
         });
         logger.info("Received: {}", user);
         logger.info("*****Test GET completed*****");
+        } catch (AssertionError e) {
+            logger.error("UserID = {} not found. AssertionError occurred: {}", userId, e.getMessage());
+            throw e;
+        }
+
     }
 
-    @Test(priority = 3, groups = "updateUser")
+    @Test(priority = 3)
     public void testUpdateUser() throws IOException {
         int userId = 1;
         String userName = "Ira";
@@ -78,42 +82,34 @@ public class UserAPITest {
         logger.info("*****Test PUT user with UserID=%d started*****", userId);
         UserApi.TestAPIResponse response = UserApi.updateUser(new User(userId, userName, userEmail));
         updateUserList(userId, userName, userEmail);
+        try{
         Assert.assertEquals(response.getCode(), 200);
         User user = new Gson().fromJson(response.getResponseStr(), new TypeToken<>() {
         });
         logger.info("Updated: {}", user);
         logger.info("*****Test PUT completed*****");
-    }
-
-    @AfterGroups("updateUser")
-    public void afterTestUpdateUser() {
-        wireMockServerSetup.updateWireMockStub(userList);
-        logger.info("User updated in WireMock mappings");
-    }
-
-    @Test(priority = 4, groups = "deleteUser")
-    public void testDeleteUser() throws IOException {
-        int userId = 1;
-        logger.info("*****Test DELETE user with UserID={} started*****", userId);
-        UserApi.TestAPIResponse response = UserApi.deleteUser(userId);
-        try {
-            Assert.assertEquals(response.getCode(), 200);
-            isUserExist = true;
-            User user = getUserById(userId);
-            userList.remove(user);
-            logger.info("Deleted: {}", user);
-            logger.info("*****Test DELETE completed*****");
+        loadingStubData("User updated in WireMock mappings");
         } catch (AssertionError e) {
-            logger.error("User with ID {} not found. AssertionError occurred: {}", userId, e.getMessage());
+            logger.error("UserID = {} not found. AssertionError occurred: {}", userId, e.getMessage());
             throw e;
         }
     }
 
-    @AfterGroups(value = "deleteUser")
-    public void afterTestDeleteUser() {
-        if (isUserExist) {
-            wireMockServerSetup.updateWireMockStub(userList);
-            logger.info("User deleted from WireMock mappings");
+    @Test(priority = 4)
+    public void testDeleteUser() throws IOException {
+        int userId = 2;
+        logger.info("*****Test DELETE user with UserID={} started*****", userId);
+        UserApi.TestAPIResponse response = UserApi.deleteUser(userId);
+        try {
+            Assert.assertEquals(response.getCode(), 200);
+            User user = getUserById(userId);
+            userList.remove(user);
+            logger.info("Deleted: {}", user);
+            logger.info("*****Test DELETE completed*****");
+            loadingStubData("User deleted from WireMock mappings");
+        } catch (AssertionError e) {
+            logger.error("UserID = {} not found. AssertionError occurred: {}", userId, e.getMessage());
+            throw e;
         }
     }
 
